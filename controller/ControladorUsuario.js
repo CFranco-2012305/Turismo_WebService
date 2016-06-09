@@ -1,6 +1,6 @@
 var usuario={
     registro:function(peticion,Respuesta){
-        respuesta.send("Servicio Iniciado");
+        respuesta.send("registro");
     }
 };
 module.exports=usuario;
