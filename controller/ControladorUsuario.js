@@ -1,21 +1,69 @@
-var mysql      = require('mysql');
-var connection = mysql.createConnection({
-  host     : 'localhost',
-  user     : 'root',
-  password : '',
-  database : 'db_TurismoGuate'
-});
 
-var usuario={
-    registro:function(peticion,respuesta){
-		respuesta.send("Servicio Iniciado");
-
-		connection.query("CALL sp_registroUsuario('"+peticion.body.nombre+"','"+peticion.body.correo+"','"+peticion.body.contraseña+"','"+peticion.body.nick+"','"+peticion.body.telefono+"','"+peticion.body.nacionalidad+"','"+peticion.body.id_Rol+"');", function(err) {
-			if (err) throw err;
-			else
-				respuesta.send({"mensaje":"registro correcto","status":"200"})
-	});
-	
-	}
-};
-module.exports=usuario;
+var jwt=require('jsonwebtoken');
+module.exports=function(modelo){
+    return {
+        prueba:function(req,res){
+            modelo.usuario.findAll().then(function(data){
+                res.json(data);
+            });
+        },
+        registro:function(peticion,respuesta){
+            modelo.sequelize.query("CALL sp_registroUsuario('"+peticion.body.nombre+"','"+peticion.body.correo+"','"+peticion.body.contraseña+"','"+peticion.body.nick+"','"+peticion.body.telefono+"','"+peticion.body.nacionalidad+"','"+peticion.body.id_Rol+"');")
+                .then(function(){
+                    respuesta.send({"mensaje":"Registro insertado correctamente","status":"200"});
+                }).error(function(err){
+                respuesta.send({"mensaje":"Error "+err,"status":"500"});
+            });
+        },
+        login:function(peticion,respuesta){
+            modelo.sequelize.query("CALL sp_autenticarUsuario('"+peticion.body.correo+"', '"+peticion.body.contraseña+"');").then(function(data){
+                if(data.length>0)
+                    respuesta.json(genToken(data));
+                else
+                    respuesta.json({"data":[]});
+            }).error(function(err){
+                respuesta.send({"mensaje":"Error "+err,"status":"500"});
+            });
+        },
+        tokenGenerator:function(req,res){
+            var token=jwt.sign({company:'VJK'},'S3CUR3@APP');
+            res.send(token);
+        },
+        tokenMiddleware:function(req,res,next){
+            var token=req.headers['x-access-token'] || req.body.token || req.query.token;
+            if(token){
+                jwt.verify(token,'S3CUR3@APP',function(err,decoded){
+                    if(err){
+                        return res.status(403).send({
+                            success:false,
+                            message:'Fallo al validar token'
+                        });
+                    }
+                    req.user=decoded;
+                    next();
+                });
+            }else{
+                return res.status(403).send({
+                    success:false,
+                    message:' token no proporcionado'
+                });
+            }
+        }
+    }
+}
+function expiresIn(dias){
+    var dateObj=new Date();
+    return dateObj.setDate(dateObj.getDate()+dias);
+}
+function genToken(user){
+    var payload=jwt.sign({
+            "company":"VJK"
+        },
+        'S3CUR3@APP');
+    var token={
+        "token":payload,
+        "user":user,
+        "exp": expiresIn(1)
+    }
+    return token;
+}
